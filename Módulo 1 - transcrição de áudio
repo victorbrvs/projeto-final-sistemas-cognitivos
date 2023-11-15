@@ -1,0 +1,28 @@
+pip install SpeechRecognition
+
+import speech_recognition as sr
+
+def transcrever_audio(caminho_audio):
+    recognizer = sr.Recognizer()
+
+    with sr.AudioFile(caminho_audio) as audio_file:
+        audio = recognizer.record(audio_file)
+
+        try:
+            texto_transcrito = recognizer.recognize_google(audio, language="en") #language = "en" para inglês, "pt-BR" para português
+            return texto_transcrito
+        except sr.UnknownValueError:
+            print("Não foi possível reconhecer o áudio")
+        except sr.RequestError as e:
+            print(f"Erro na requisição para o serviço de reconhecimento de fala: {e}")
+            
+#arquivos disponíveis no repositório:
+#Audio 1 - en - reconhecimento.wav - áudio em inglês
+#Audio 1 - reconhecimento.wav - áudio em português
+
+caminho_do_audio = "Audio 1 - en - reconhecimento.wav"
+texto_transcrito = transcrever_audio(caminho_do_audio)
+
+if texto_transcrito:
+    print("Texto transcrito:")
+    print(texto_transcrito)

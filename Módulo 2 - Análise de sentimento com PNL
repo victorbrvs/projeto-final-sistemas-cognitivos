@@ -1,0 +1,19 @@
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+
+nltk.download('vader_lexicon')
+
+def analisar_sentimento(texto):
+    sia = SentimentIntensityAnalyzer()
+    resultado = sia.polarity_scores(texto)
+
+    if resultado['compound'] >= 0.05:
+        return 'Positivo'
+    elif resultado['compound'] <= -0.05:
+        return 'Negativo'
+    else:
+        return 'Neutro'
+
+sentimento = analisar_sentimento(texto_transcrito) #texto_transcrito deve ser a variável gerada no passo anterior
+
+print(f"Sentimento: {sentimento}")

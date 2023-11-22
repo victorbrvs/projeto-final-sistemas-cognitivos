@@ -1,0 +1,136 @@
+import os
+import tkinter as tk
+import numpy as np
+from keras.models import load_model
+import pandas as pd
+from googletrans import Translator
+from tkinter import Tk, Text, Scrollbar, END, Button, filedialog, Label
+
+class AudioAnalyzerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Audio Analyzer App")
+
+        self.arquivo_audio = None
+
+        # Estilização
+        self.root.geometry("400x500")
+        self.root.configure(bg="#f5f5f5")  # Cor de fundo
+
+        # Barra de navegação
+        self.navbar = Label(self.root, bg="#3498db", height=2)
+        self.navbar.pack(fill="x")
+
+        # Título
+        self.title_label = Label(self.root, text="Audio Analyzer", font=("Helvetica", 20), bg="#f5f5f5", fg="#333")
+        self.title_label.pack(pady=10)
+
+        # Botões
+        self.btn_procurar_arquivo = Button(
+            self.root, text="Procurar Arquivo", command=self.procurar_arquivo, relief="flat", bg="#3498db", fg="white", font=("Helvetica", 14)
+        )
+        self.btn_procurar_arquivo.place(x=50, y=120, width=300, height=40)
+
+        self.btn_analisar = Button(
+            self.root, text="Analisar", command=self.analisar, relief="flat", bg="#2ecc71", fg="white", font=("Helvetica", 14)
+        )
+        self.btn_analisar.place(x=50, y=190, width=300, height=40)
+        
+        # Output Text Widget
+        self.output_text = Text(self.root, wrap="word", font=("Helvetica", 12), bg="#ecf0f1", state="disabled")
+        self.output_text.place(x=20, y=260, width=360, height=200)  # Ajuste de posição e tamanho
+
+        # Scrollbar para o Text Widget
+        scrollbar = Scrollbar(self.root, command=self.output_text.yview)
+        scrollbar.place(x=380, y=260, height=200)  # Ajuste de posição
+        self.output_text.config(yscrollcommand=scrollbar.set)
+
+
+        self.arquivo_selecionado = None
+        self.model = load_model("seu_modelo.h5")
+
+        # Inicializar DataFrame para armazenar resultados
+        self.result_df = pd.DataFrame(columns=["Arquivo", "Texto Transcrito", "Score Texto", "Score Entonação", "Média"])
+
+        # Label para exibir o status da gravação
+        self.status_label = Label(root, text="")
+        self.status_label.pack()
+
+    def procurar_arquivo(self):
+        self.arquivo_audio = filedialog.askopenfilename(filetypes=[("Arquivos de Áudio", "*.wav")])
+        self.atualizar_status_label()
+
+
+    def descartar(self):
+        self.arquivo_audio = None
+        self.btn_procurar_arquivo["state"] = "normal"
+        self.atualizar_status_label()
+        
+    def extract_features(self, caminho_audio):
+        y, sr = librosa.load(caminho_audio)
+        mfccs = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13), axis=1)
+        chroma = np.mean(librosa.feature.chroma_stft(y=y, sr=sr), axis=1)
+        mel = np.mean(librosa.feature.melspectrogram(y=y, sr=sr), axis=1)
+        features = np.hstack([mfccs, chroma, mel])
+        return features
+
+
+    
+    def transcrever_audio(self, caminho_audio):
+        recognizer = sr.Recognizer()
+
+        with sr.AudioFile(caminho_audio) as audio_file:
+            audio = recognizer.record(audio_file)
+
+            try:
+                texto_transcrito = recognizer.recognize_google(audio, language="pt-BR") #pt-BR
+                return texto_transcrito
+            except sr.UnknownValueError:
+                print("Não foi possível reconhecer o áudio")
+            except sr.RequestError as e:
+                print(f"Erro na requisição para o serviço de reconhecimento de fala: {e}")
+                
+                
+    def traduzir_texto(self, texto):
+        translator = Translator()
+        traducao = translator.translate(texto, src='pt', dest='en')
+        return traducao.text
+
+    def analisar_sentimento(self, texto):
+        texto_ingles = self.traduzir_texto(texto)
+        sia = SentimentIntensityAnalyzer()
+        resultado = sia.polarity_scores(texto_ingles)
+        resultado = resultado['compound']
+        return resultado
+
+
+    def analisar(self):
+        if self.arquivo_audio:
+            audio_features = self.extract_features(self.arquivo_audio)
+            audio_features_input = np.array(audio_features).reshape(1, -1)
+            sentiment_score = self.model.predict(audio_features_input)
+            texto_transcrito = self.transcrever_audio(self.arquivo_audio)
+            sentimento_texto = self.analisar_sentimento(texto_transcrito)
+            normalized_compound = (sentimento_texto + 1) / 2
+            media_resultado = (normalized_compound + sentiment_score[0][0]) / 2
+            self.result_df = self.result_df.append(
+                {"Arquivo": os.path.basename(self.arquivo_audio), "Texto Transcrito": texto_transcrito,
+                 "Score Texto": normalized_compound, "Score Entonação": sentiment_score[0][0], "Média": media_resultado},
+                ignore_index=True)
+            
+            output_result = f"Texto Transcrito: {texto_transcrito}\nScore Texto: {normalized_compound}\nScore Entonação: {sentiment_score[0][0]}\nMédia: {media_resultado}\n\n"
+            self.output_text.config(state="normal")
+            self.output_text.insert(END, output_result)
+            self.output_text.config(state="disabled")
+
+
+    def atualizar_status_label(self):
+        if  self.arquivo_audio:
+            self.status_label["text"] = f"Arquivo selecionado: {os.path.basename(self.arquivo_audio)}"
+        else:
+            self.status_label["text"] = ""
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AudioAnalyzerApp(root)
+    root.mainloop()
